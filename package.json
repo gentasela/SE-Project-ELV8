@@ -1,0 +1,12 @@
+{
+  "name": "elv8",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npx concurrently -c \"blue.bold,green.bold\" -n \"SERVER,CLIENT\" \"npm run start-server\" \"npm run start-client\"",
+    "start-server": "cd server && node server.js",
+    "start-client": "cd client && npm run dev"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
