@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { getCurrentUser } from "@/lib/auth";
 import type { MonthlyPlan, UserProfile } from "@/lib/types";
-import { completionRate, getLog, streak } from "@/lib/progress";
+import { completionRate, getAllLogs, streak } from "@/lib/progress";
 import { currentProgramDay, dateForDay, ensureMonthlyPlan } from "@/lib/plan";
+import type { ProgressLog } from "@/lib/types";
 
 export const Route = createFileRoute("/app/progress")({
   head: () => ({
@@ -19,23 +20,41 @@ function ProgressPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [plan, setPlan] = useState<MonthlyPlan | null>(null);
+  const [logs, setLogs] = useState<Record<string, ProgressLog>>({});
+  const [s, setS] = useState(0);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) {
-      navigate({ to: "/login" });
-      return;
-    }
-    setUser(u);
-    setPlan(ensureMonthlyPlan(u));
+    const load = async () => {
+      const u = await getCurrentUser();
+      if (!u) {
+        navigate({ to: "/login" });
+        return;
+      }
+      setUser(u);
+      
+      const [p, allLogs, currentStreak] = await Promise.all([
+        ensureMonthlyPlan(u),
+        getAllLogs(u.id),
+        streak(u.id),
+      ]);
+      
+      setPlan(p);
+      setLogs(allLogs);
+      setS(currentStreak);
+    };
+    load();
   }, [navigate]);
 
   const programDays = useMemo(() => {
     if (!user || !plan) return [] as { day: number; date: string; rate: number; workoutDone: boolean; mealsDone: number; isFuture: boolean }[];
     const todayN = currentProgramDay(plan);
+    const emptyLog: ProgressLog = {
+      workoutDone: false,
+      meals: { breakfast: false, lunch: false, dinner: false, snack: false },
+    };
     return plan.days.map((d) => {
       const date = dateForDay(plan, d.dayInProgram);
-      const log = getLog(user.id, date);
+      const log = logs[date] ?? emptyLog;
       return {
         day: d.dayInProgram,
         date,
@@ -45,9 +64,8 @@ function ProgressPage() {
         isFuture: d.dayInProgram > todayN,
       };
     });
-  }, [user, plan]);
+  }, [user, plan, logs]);
 
-  const s = useMemo(() => (user ? streak(user.id) : 0), [user]);
   const todayN = plan ? currentProgramDay(plan) : 0;
   const completedSoFar = programDays.slice(0, todayN);
   const avgPct = completedSoFar.length

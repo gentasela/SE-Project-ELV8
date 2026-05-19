@@ -15,14 +15,17 @@ function AppLayout() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) {
-      navigate({ to: "/login" });
-      return;
-    }
-    ensureMonthlyPlan(u);
-    setUser(u);
-    setReady(true);
+    const init = async () => {
+      const u = await getCurrentUser();
+      if (!u) {
+        navigate({ to: "/login" });
+        return;
+      }
+      await ensureMonthlyPlan(u);
+      setUser(u);
+      setReady(true);
+    };
+    init();
   }, [navigate]);
 
   if (!ready || !user) {

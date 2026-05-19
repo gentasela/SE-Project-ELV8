@@ -31,23 +31,26 @@ function MonthPage() {
   const [selected, setSelected] = useState<number>(1);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) {
-      navigate({ to: "/login" });
-      return;
-    }
-    setUser(u);
-    const p = ensureMonthlyPlan(u);
-    setPlan(p);
-    setSelected(currentProgramDay(p));
+    const load = async () => {
+      const u = await getCurrentUser();
+      if (!u) {
+        navigate({ to: "/login" });
+        return;
+      }
+      setUser(u);
+      const p = await ensureMonthlyPlan(u);
+      setPlan(p);
+      setSelected(currentProgramDay(p));
+    };
+    load();
   }, [navigate]);
 
   const day = useMemo(() => (plan ? plan.days[selected - 1] : null), [plan, selected]);
 
   if (!user || !plan || !day) return null;
 
-  const switchVariant = (v: Variant) => {
-    const next = setActiveVariant(user, v);
+  const switchVariant = async (v: Variant) => {
+    const next = await setActiveVariant(user, v);
     setPlan(next);
   };
 

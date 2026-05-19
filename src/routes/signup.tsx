@@ -82,7 +82,7 @@ function SignUpPage() {
         level,
         goal,
       });
-      ensureMonthlyPlan(user);
+      await ensureMonthlyPlan(user);
       navigate({ to: "/app/today" });
     } catch (e) {
       setErr((e as Error).message);

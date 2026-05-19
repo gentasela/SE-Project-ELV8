@@ -27,6 +27,7 @@ export interface UserProfile {
   level: Level;
   goal: Goal;
   createdAt: number;
+  remindersEnabled?: boolean;
 }
 
 export interface Exercise {

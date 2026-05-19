@@ -18,8 +18,11 @@ function Landing() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (u) navigate({ to: "/app/today" });
+    const check = async () => {
+      const u = await getCurrentUser();
+      if (u) navigate({ to: "/app/today" });
+    };
+    check();
   }, [navigate]);
 
   return (

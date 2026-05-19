@@ -34,11 +34,19 @@ function FridgePage() {
   const [swapped, setSwapped] = useState<string | null>(null);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) { navigate({ to: "/login" }); return; }
-    setUser(u);
-    setPlan(ensureMonthlyPlan(u));
-    setItems(readInventory(u.id));
+    const load = async () => {
+      const u = await getCurrentUser();
+      if (!u) { navigate({ to: "/login" }); return; }
+      setUser(u);
+      
+      const [p, inv] = await Promise.all([
+        ensureMonthlyPlan(u),
+        readInventory(u.id),
+      ]);
+      setPlan(p);
+      setItems(inv);
+    };
+    load();
   }, [navigate]);
 
   const matches = useMemo(() => {
@@ -53,17 +61,24 @@ function FridgePage() {
 
   const dayNum = currentProgramDay(plan);
 
-  const add = (raw: string) => {
+  const add = async (raw: string) => {
     const v = raw.trim().toLowerCase();
     if (!v) return;
-    setItems(addInventoryItem(user.id, v));
+    const next = await addInventoryItem(user.id, v);
+    setItems(next);
     setDraft("");
   };
-  const remove = (v: string) => setItems(removeInventoryItem(user.id, v));
-  const clear = () => setItems(setInventory(user.id, []));
+  const remove = async (v: string) => {
+    const next = await removeInventoryItem(user.id, v);
+    setItems(next);
+  };
+  const clear = async () => {
+    const next = await setInventory(user.id, []);
+    setItems(next);
+  };
 
-  const swapIntoToday = (m: RecipeMatch) => {
-    const next = swapMealForDay(user, dayNum, m.slot, m.meal);
+  const swapIntoToday = async (m: RecipeMatch) => {
+    const next = await swapMealForDay(user, dayNum, m.slot, m.meal);
     setPlan({ ...next });
     setSwapped(`${SLOT_LABEL[m.slot]} swapped to "${m.meal.title}".`);
     setTimeout(() => setSwapped(null), 2400);

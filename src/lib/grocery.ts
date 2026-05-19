@@ -53,16 +53,12 @@ function categorize(name: string): GroceryCategory {
 
 /** Parse "200 g chicken breast" -> { qty: 200, unit: "g", name: "chicken breast" } */
 function parseLine(raw: string): { qty?: number; unit?: string; name: string } {
-<<<<<<< HEAD
   // Chain: remove bullets -> remove S/D prefix -> trim
   let line = raw
     .trim()
     .replace(/^[•\-*]\s*/, "")
     .replace(/^[SD]\s+/i, "")
     .trim();
-=======
-  const line = raw.trim().replace(/^[•\-*]\s*/, "");
->>>>>>> 0dae64ca47dc002bfcbea38f457d78db04b4559d
   // Match leading qty (number or fraction like 1/2) + optional unit.
   const re = /^([\d./]+)\s*(g|kg|ml|l|cup|cups|tbsp|tsp|slice|slices|can|cans|scoop|scoops|piece|pieces)?\s*(.*)$/i;
   const m = line.match(re);
@@ -115,13 +111,10 @@ export function buildGroceryList(plan: MonthlyPlan, weekIndex?: number): Record<
         if (!name) continue;
         const key = canonicalKey(name);
         const display = key.charAt(0).toUpperCase() + key.slice(1);
-<<<<<<< HEAD
         // Store cleaned ingredient string for UI display (not raw)
         const cleanedIngredient = qty !== undefined
           ? `${qty}${unit ? " " + unit : ""} ${name}`
           : name;
-=======
->>>>>>> 0dae64ca47dc002bfcbea38f457d78db04b4559d
         const existing = map.get(key);
         if (existing) {
           if (qty !== undefined && (!existing.unit || existing.unit === unit)) {
@@ -129,13 +122,8 @@ export function buildGroceryList(plan: MonthlyPlan, weekIndex?: number): Record<
             existing.unit = existing.unit ?? unit;
             existing.breakdown.push({ day: day.dayInProgram, amount: `${qty}${unit ? " " + unit : ""}` });
           } else {
-<<<<<<< HEAD
             existing.nonNumeric.push(`Day ${day.dayInProgram}: ${cleanedIngredient}`);
             existing.breakdown.push({ day: day.dayInProgram, amount: cleanedIngredient });
-=======
-            existing.nonNumeric.push(`Day ${day.dayInProgram}: ${raw}`);
-            existing.breakdown.push({ day: day.dayInProgram, amount: raw });
->>>>>>> 0dae64ca47dc002bfcbea38f457d78db04b4559d
           }
         } else {
           map.set(key, {
@@ -143,19 +131,11 @@ export function buildGroceryList(plan: MonthlyPlan, weekIndex?: number): Record<
             category: categorize(key),
             breakdown: qty !== undefined
               ? [{ day: day.dayInProgram, amount: `${qty}${unit ? " " + unit : ""}` }]
-<<<<<<< HEAD
               : [{ day: day.dayInProgram, amount: cleanedIngredient }],
             total: "",
             numericQty: qty ?? 0,
             unit,
             nonNumeric: qty === undefined ? [cleanedIngredient] : [],
-=======
-              : [{ day: day.dayInProgram, amount: raw }],
-            total: "",
-            numericQty: qty ?? 0,
-            unit,
-            nonNumeric: qty === undefined ? [raw] : [],
->>>>>>> 0dae64ca47dc002bfcbea38f457d78db04b4559d
           });
         }
       }
@@ -188,28 +168,18 @@ export function buildGroceryList(plan: MonthlyPlan, weekIndex?: number): Record<
   return grouped;
 }
 
-/* ---------------- Fridge inventory (localStorage) ---------------- */
+/* ---------------- Fridge checklist (REST API) ---------------- */
 
-const KEY = "elv8:fridge";
+import { apiFetch } from "./api";
 
-export function readFridge(userId: string): Record<string, boolean> {
-  if (typeof window === "undefined") return {};
-  try {
-    const all = JSON.parse(window.localStorage.getItem(KEY) ?? "{}");
-    return all[userId] ?? {};
-  } catch {
-    return {};
-  }
+export async function readFridge(userId: string): Promise<Record<string, boolean>> {
+  return apiFetch<Record<string, boolean>>("/api/grocery/checklist");
 }
 
-export function toggleFridge(userId: string, itemName: string): Record<string, boolean> {
-  const all = (() => {
-    try { return JSON.parse(window.localStorage.getItem(KEY) ?? "{}"); }
-    catch { return {}; }
-  })();
-  const cur = all[userId] ?? {};
-  cur[itemName] = !cur[itemName];
-  all[userId] = cur;
-  window.localStorage.setItem(KEY, JSON.stringify(all));
-  return cur;
+export async function toggleFridge(userId: string, itemName: string): Promise<Record<string, boolean>> {
+  return apiFetch<Record<string, boolean>>("/api/grocery/toggle", {
+    method: "POST",
+    body: JSON.stringify({ itemName }),
+  });
 }
+

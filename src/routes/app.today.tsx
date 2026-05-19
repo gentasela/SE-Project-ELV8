@@ -34,15 +34,26 @@ function TodayPage() {
   const [s, setS] = useState(0);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) {
-      navigate({ to: "/login" });
-      return;
-    }
-    setUser(u);
-    setPlan(ensureMonthlyPlan(u));
-    setLog(getLog(u.id));
-    setS(streak(u.id));
+    const loadData = async () => {
+      const u = await getCurrentUser();
+      if (!u) {
+        navigate({ to: "/login" });
+        return;
+      }
+      setUser(u);
+      
+      // Load plan, progress and streak in parallel
+      const [p, l, currentStreak] = await Promise.all([
+        ensureMonthlyPlan(u),
+        getLog(u.id),
+        streak(u.id),
+      ]);
+      
+      setPlan(p);
+      setLog(l);
+      setS(currentStreak);
+    };
+    loadData();
   }, [navigate]);
 
   const dayNum = useMemo(() => (plan ? currentProgramDay(plan) : 1), [plan]);
@@ -52,32 +63,97 @@ function TodayPage() {
     [user],
   );
 
+  const notifications = useMemo(() => {
+    if (!user || !user.remindersEnabled || !log || !today) return [];
+    const list = [];
+
+    // Workout reminder
+    if (!log.workoutDone) {
+      list.push({
+        id: "workout",
+        type: "workout",
+        title: "Workout Pending",
+        message: `Your scheduled workout for today is "${today.workout.title}" (${today.workout.durationMin} mins). Make sure to check it off once completed!`,
+      });
+    } else {
+      list.push({
+        id: "workout-done",
+        type: "success",
+        title: "Workout Completed!",
+        message: `Great job completing "${today.workout.title}" today! Keep that momentum going.`,
+      });
+    }
+
+    // Meal reminders
+    const missingMeals = Object.entries(log.meals).filter(([_, done]) => !done);
+    if (missingMeals.length > 0) {
+      const slots = missingMeals.map(([slot]) => slot.charAt(0).toUpperCase() + slot.slice(1)).join(", ");
+      list.push({
+        id: "meals",
+        type: "meal",
+        title: "Nutrition Tracker",
+        message: `Keep tracking your clean eating! You have pending meal entries: ${slots}.`,
+      });
+    } else {
+      list.push({
+        id: "meals-done",
+        type: "success",
+        title: "Perfect Nutrition!",
+        message: "You checked off all your meals for today. Outstanding discipline!",
+      });
+    }
+
+    // Goal tip
+    if (user.goal === "lose") {
+      list.push({
+        id: "tip",
+        type: "tip",
+        title: "Nutrition Tip",
+        message: "Focus on high-volume, low-calorie foods (like leafy greens and lean proteins) to stay full while in a deficit.",
+      });
+    } else {
+      list.push({
+        id: "tip",
+        type: "tip",
+        title: "Nutrition Tip",
+        message: "Ensure you're meeting your calorie surplus with clean carb sources like oats, sweet potatoes, and white rice.",
+      });
+    }
+
+    return list;
+  }, [user, log, today]);
+
   if (!user || !plan || !today || !log) return null;
 
   const budget = macroBudget(today.targetKcal);
   const consumed = consumedForDay(today, log);
 
-  const handleToggleWorkout = () => {
-    const next = toggleWorkout(user.id);
+  const handleToggleWorkout = async () => {
+    const next = await toggleWorkout(user.id);
     setLog(next);
-    setS(streak(user.id));
+    const currentStreak = await streak(user.id);
+    setS(currentStreak);
   };
-  const handleToggleMeal = (slot: keyof ProgressLog["meals"]) => {
+  const handleToggleMeal = async (slot: keyof ProgressLog["meals"]) => {
     const wasDone = log?.meals[slot] ?? false;
-    const next = toggleMeal(user.id, slot);
+    const next = await toggleMeal(user.id, slot);
     setLog(next);
-    setS(streak(user.id));
+    const currentStreak = await streak(user.id);
+    setS(currentStreak);
     // If we just marked the meal complete, deduct its ingredients from
     // the user's "in fridge" inventory so the pantry stays in sync.
     if (!wasDone && next.meals[slot]) {
       const slotEntry = today.meals.find((m) => m.slot === slot);
       if (slotEntry) {
         const optionIdx = log?.workoutDone ? 0 : 1;
-        deductMealFromInventory(user.id, slotEntry.options[optionIdx]);
+        await deductMealFromInventory(user.id, slotEntry.options[optionIdx]);
       }
     }
   };
-  const switchVariant = (v: Variant) => setPlan(setActiveVariant(user, v));
+  const switchVariant = async (v: Variant) => {
+    const nextPlan = await setActiveVariant(user, v);
+    setPlan(nextPlan);
+  };
 
   return (
     <main className="mx-auto max-w-3xl px-5 pt-10">
@@ -121,6 +197,65 @@ function TodayPage() {
           />
         </div>
       </section>
+
+      {/* Reminders & Notifications */}
+      {user.remindersEnabled && notifications.length > 0 && (
+        <section className="mt-6 rounded-2xl border border-border bg-surface/50 p-5 backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-lime opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-lime"></span>
+            </span>
+            <h2 className="font-display text-xs font-700 uppercase tracking-widest text-muted-foreground">
+              Daily Reminders
+            </h2>
+          </div>
+          <div className="mt-3 space-y-2">
+            {notifications.map((n) => (
+              <div
+                key={n.id}
+                className="flex items-start gap-3 rounded-xl border border-border bg-background/50 p-3 transition-all duration-300 hover:border-accent-lime/40"
+              >
+                <div className="mt-0.5 text-accent-lime">
+                  {n.type === "success" ? (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : n.type === "workout" ? (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  ) : n.type === "meal" ? (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707-.707M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 113.536 0V17H9m3 0V17" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <h4 className="font-display text-xs font-700 text-foreground">{n.title}</h4>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{n.message}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {!user.remindersEnabled && (
+        <div className="mt-6 flex items-center justify-between rounded-2xl border border-dashed border-border bg-surface/20 p-4 text-xs text-muted-foreground">
+          <span>Daily tips and checklist reminders are muted.</span>
+          <button
+            onClick={() => navigate({ to: "/app/me" })}
+            className="text-accent-lime hover:underline font-600 uppercase tracking-wider text-[10px]"
+          >
+            Enable Reminders
+          </button>
+        </div>
+      )}
 
       {/* Daily macro budget — auto-fills as meals are checked off */}
       <div className="mt-6">

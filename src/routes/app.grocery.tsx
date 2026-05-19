@@ -35,11 +35,19 @@ function GroceryPage() {
   const [fridge, setFridge] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) { navigate({ to: "/login" }); return; }
-    setUser(u);
-    setPlan(ensureMonthlyPlan(u));
-    setFridge(readFridge(u.id));
+    const load = async () => {
+      const u = await getCurrentUser();
+      if (!u) { navigate({ to: "/login" }); return; }
+      setUser(u);
+      
+      const [p, check] = await Promise.all([
+        ensureMonthlyPlan(u),
+        readFridge(u.id),
+      ]);
+      setPlan(p);
+      setFridge(check);
+    };
+    load();
   }, [navigate]);
 
   const list = useMemo(() => {
@@ -49,8 +57,9 @@ function GroceryPage() {
 
   if (!user || !plan || !list) return null;
 
-  const handleToggle = (name: string) => {
-    setFridge(toggleFridge(user.id, name));
+  const handleToggle = async (name: string) => {
+    const next = await toggleFridge(user.id, name);
+    setFridge(next);
   };
 
   const totals = CATEGORIES.reduce(

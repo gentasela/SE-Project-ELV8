@@ -1,11 +1,7 @@
-import type { Meal, MonthlyPlan, ProgramDay, UserProfile } from "./types";
+import type { Meal, MonthlyPlan } from "./types";
+import { apiFetch } from "./api";
 
-/* -------- Inventory keyword extraction --------
- * We extract simple food-noun keywords from ingredient strings so we can
- * match a user's pantry items against any recipe ingredient line.
- * Stop-words and units are filtered out; we also strip leading qty/unit.
- */
-
+/* -------- Inventory keyword extraction -------- */
 const STOP = new Set([
   "and","or","with","a","an","the","of","to","into","plus","optional",
   "fresh","dried","frozen","cooked","raw","baked","grilled","sliced","chopped",
@@ -30,10 +26,8 @@ function tokenize(line: string): string[] {
     .filter((w) => w.length >= 3 && !STOP.has(w));
 }
 
-/** Extract a small set of canonical "keywords" from one ingredient line. */
 export function ingredientKeywords(line: string): string[] {
   const toks = tokenize(line);
-  // de-dup, keep order
   const seen = new Set<string>();
   const out: string[] = [];
   for (const t of toks) {
@@ -42,7 +36,6 @@ export function ingredientKeywords(line: string): string[] {
   return out;
 }
 
-/** Aggregate keywords across all ingredients of a meal. */
 export function mealKeywords(meal: Meal): Set<string> {
   const set = new Set<string>();
   for (const raw of meal.ingredients) {
@@ -51,50 +44,34 @@ export function mealKeywords(meal: Meal): Set<string> {
   return set;
 }
 
-/* -------- Inventory storage --------
- * Inventory items are simple lowercase keywords (e.g., "chicken", "spinach").
- * Persisted per-user in localStorage.
- */
-const INV_KEY = "elv8:fridgeInv";
+/* -------- Inventory storage (REST API) -------- */
 
-interface InventoryStore { [userId: string]: string[] }
-
-function readAll(): InventoryStore {
-  if (typeof window === "undefined") return {};
-  try { return JSON.parse(window.localStorage.getItem(INV_KEY) ?? "{}"); }
-  catch { return {}; }
-}
-function writeAll(s: InventoryStore) {
-  window.localStorage.setItem(INV_KEY, JSON.stringify(s));
+export async function readInventory(userId: string): Promise<string[]> {
+  return apiFetch<string[]>("/api/fridge/inventory");
 }
 
-export function readInventory(userId: string): string[] {
-  return readAll()[userId] ?? [];
+export async function setInventory(userId: string, items: string[]): Promise<string[]> {
+  return apiFetch<string[]>("/api/fridge/inventory", {
+    method: "PUT",
+    body: JSON.stringify({ items }),
+  });
 }
 
-export function setInventory(userId: string, items: string[]): string[] {
-  const norm = Array.from(new Set(items.map((i) => i.trim().toLowerCase()).filter(Boolean)));
-  const all = readAll();
-  all[userId] = norm;
-  writeAll(all);
-  return norm;
-}
-
-export function addInventoryItem(userId: string, item: string): string[] {
-  const cur = readInventory(userId);
+export async function addInventoryItem(userId: string, item: string): Promise<string[]> {
+  const cur = await readInventory(userId);
   const norm = item.trim().toLowerCase();
   if (!norm || cur.includes(norm)) return cur;
   return setInventory(userId, [...cur, norm]);
 }
 
-export function removeInventoryItem(userId: string, item: string): string[] {
+export async function removeInventoryItem(userId: string, item: string): Promise<string[]> {
   const norm = item.trim().toLowerCase();
-  return setInventory(userId, readInventory(userId).filter((i) => i !== norm));
+  const cur = await readInventory(userId);
+  return setInventory(userId, cur.filter((i) => i !== norm));
 }
 
-/** Remove from inventory any items whose keyword appears in the meal. Returns removed list. */
-export function deductMealFromInventory(userId: string, meal: Meal): string[] {
-  const inv = readInventory(userId);
+export async function deductMealFromInventory(userId: string, meal: Meal): Promise<string[]> {
+  const inv = await readInventory(userId);
   if (!inv.length) return [];
   const kw = mealKeywords(meal);
   const removed: string[] = [];
@@ -103,23 +80,21 @@ export function deductMealFromInventory(userId: string, meal: Meal): string[] {
     if (hit) removed.push(item);
     return !hit;
   });
-  if (removed.length) setInventory(userId, next);
+  if (removed.length) await setInventory(userId, next);
   return removed;
 }
 
-/* -------- Recipe ranking --------
- * Score every meal in the plan by how many of the user's pantry items it covers.
- */
+/* -------- Recipe ranking -------- */
 export interface RecipeMatch {
   meal: Meal;
   dayInProgram: number;
   slot: Meal["slot"];
-  variantSlotIndex: 0 | 1; // which option (A or B)
-  matched: string[];       // pantry items the recipe uses
-  missing: string[];       // pantry items NOT used
-  total: number;           // pantry size
-  score: number;           // matched / total
-  perfect: boolean;        // matched == total
+  variantSlotIndex: 0 | 1;
+  matched: string[];
+  missing: string[];
+  total: number;
+  score: number;
+  perfect: boolean;
 }
 
 export function rankRecipes(plan: MonthlyPlan, pantry: string[]): RecipeMatch[] {
@@ -134,7 +109,7 @@ export function rankRecipes(plan: MonthlyPlan, pantry: string[]): RecipeMatch[] 
         const matched: string[] = [];
         const missing: string[] = [];
         for (const it of items) {
-          const hit = kw.has(it) || Array.from(kw).some((k) => k.includes(it) || it.includes(k));
+          const hit = kw.has(it) || Array.from(kw).some((k) => k.includes(it) || itemMatches(it, k));
           if (hit) matched.push(it); else missing.push(it);
         }
         if (!matched.length) continue;
@@ -149,7 +124,7 @@ export function rankRecipes(plan: MonthlyPlan, pantry: string[]): RecipeMatch[] 
       }
     }
   }
-  // De-dup by meal title (so we don't show the same recipe 8 times across the month)
+  
   const seen = new Set<string>();
   const dedup: RecipeMatch[] = [];
   out.sort((a, b) => b.matched.length - a.matched.length || a.dayInProgram - b.dayInProgram);
@@ -161,7 +136,10 @@ export function rankRecipes(plan: MonthlyPlan, pantry: string[]): RecipeMatch[] 
   return dedup;
 }
 
-/* -------- Suggested keywords (for quick-add chips) -------- */
+function itemMatches(it: string, k: string): boolean {
+  return k.includes(it) || it.includes(k);
+}
+
 export const SUGGESTED_INVENTORY = [
   "chicken","beef","turkey","salmon","tuna","cod","shrimp","egg","tofu",
   "spinach","broccoli","tomato","cucumber","pepper","onion","garlic","carrot",

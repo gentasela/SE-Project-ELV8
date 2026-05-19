@@ -12,13 +12,13 @@ import {
 } from "recharts";
 import { getCurrentUser } from "@/lib/auth";
 import { currentProgramDay, dateForDay, ensureMonthlyPlan } from "@/lib/plan";
-import { getLog } from "@/lib/progress";
+import { getAllLogs } from "@/lib/progress";
 import {
   consistencyScore,
   consumedForDay,
   intensityScore,
 } from "@/lib/macros";
-import type { MonthlyPlan, UserProfile } from "@/lib/types";
+import type { MonthlyPlan, UserProfile, ProgressLog } from "@/lib/types";
 
 export const Route = createFileRoute("/app/stats")({
   head: () => ({
@@ -37,20 +37,34 @@ function StatsPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [plan, setPlan] = useState<MonthlyPlan | null>(null);
+  const [logs, setLogs] = useState<Record<string, ProgressLog>>({});
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) { navigate({ to: "/login" }); return; }
-    setUser(u);
-    setPlan(ensureMonthlyPlan(u));
+    const load = async () => {
+      const u = await getCurrentUser();
+      if (!u) { navigate({ to: "/login" }); return; }
+      setUser(u);
+      
+      const [p, allLogs] = await Promise.all([
+        ensureMonthlyPlan(u),
+        getAllLogs(u.id),
+      ]);
+      setPlan(p);
+      setLogs(allLogs);
+    };
+    load();
   }, [navigate]);
 
   const data = useMemo(() => {
     if (!user || !plan) return [];
     const todayN = currentProgramDay(plan);
+    const emptyLog: ProgressLog = {
+      workoutDone: false,
+      meals: { breakfast: false, lunch: false, dinner: false, snack: false },
+    };
     return plan.days.map((d) => {
       const date = dateForDay(plan, d.dayInProgram);
-      const log = getLog(user.id, date);
+      const log = logs[date] ?? emptyLog;
       const isFuture = d.dayInProgram > todayN;
       if (isFuture) {
         return { day: d.dayInProgram, intensity: null, consistency: null };
