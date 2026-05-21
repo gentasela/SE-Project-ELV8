@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import { db } from "../db";
 import { requireAuth } from "../middleware/auth";
 
@@ -13,6 +13,40 @@ router.get("/inventory", requireAuth, (req, res) => {
   } catch (error) {
     console.error("[Fridge] Error reading inventory:", error);
     return res.status(500).json({ error: "Failed to read fridge inventory" });
+  }
+});
+
+// ADD A SINGLE ITEM TO INVENTORY (POST)
+router.post("/inventory", requireAuth, (req: express.Request, res: express.Response) => {
+  const { item } = req.body;
+
+  if (!item || typeof item !== "string" || !item.trim()) {
+    return res.status(400).json({ error: "A non-empty item string is required" });
+  }
+
+  const normalized = item.trim().toLowerCase();
+
+  try {
+    const user = db
+      .prepare("SELECT id FROM users WHERE id = ?")
+      .get(req.user!.id);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    db.prepare(
+      "INSERT OR IGNORE INTO fridge_inventory (userId, item) VALUES (?, ?)"
+    ).run(req.user!.id, normalized);
+
+    const rows = db
+      .prepare("SELECT item FROM fridge_inventory WHERE userId = ?")
+      .all(req.user!.id) as { item: string }[];
+
+    return res.status(201).json(rows.map((r) => r.item));
+  } catch (error) {
+    console.error("[Fridge] Error adding item to inventory:", error);
+    return res.status(500).json({ error: "Failed to add item to fridge inventory" });
   }
 });
 

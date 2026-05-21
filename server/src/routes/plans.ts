@@ -123,8 +123,13 @@ router.put("/swap-meal", requireAuth, (req, res) => {
   const { dayInProgram, slot, newMeal } = req.body;
 
   if (!dayInProgram || !slot || !newMeal) {
-    return res.status(400).json({ error: "Missing swap details" });
-  }
+  return res.status(400).json({ error: "Missing swap details" });
+}
+
+const validSlots = ["breakfast", "lunch", "dinner", "snack"];
+if (!validSlots.includes(slot)) {
+  return res.status(400).json({ error: "Invalid meal slot. Must be breakfast, lunch, dinner or snack." });
+}
 
   try {
     const { activeVariant, plans } = getOrGeneratePlans(req.user!.id);

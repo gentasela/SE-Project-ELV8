@@ -15,20 +15,23 @@ db.pragma("foreign_keys = ON");
 // Initialize tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    passwordHash TEXT NOT NULL,
-    name TEXT NOT NULL,
-    age INTEGER NOT NULL,
-    heightCm INTEGER NOT NULL,
-    weightKg REAL NOT NULL,
-    sex TEXT NOT NULL CHECK(sex IN ('female','male','other')),
-    discipline TEXT NOT NULL,
-    level TEXT NOT NULL CHECK(level IN ('beginner','intermediate','advanced')),
-    goal TEXT NOT NULL CHECK(goal IN ('lose','gain')),
-    createdAt INTEGER NOT NULL,
-    remindersEnabled INTEGER NOT NULL DEFAULT 1
-  );
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  passwordHash TEXT NOT NULL,
+  name TEXT NOT NULL,
+  age INTEGER NOT NULL,
+  heightCm INTEGER NOT NULL,
+  weightKg REAL NOT NULL,
+  sex TEXT NOT NULL CHECK(sex IN ('female','male','other')),
+  discipline TEXT NOT NULL,
+  level TEXT NOT NULL CHECK(level IN ('beginner','intermediate','advanced')),
+  goal TEXT NOT NULL CHECK(goal IN ('lose','gain')),
+  createdAt INTEGER NOT NULL,
+  remindersEnabled INTEGER NOT NULL DEFAULT 1,
+  role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin')),
+  oauthProvider TEXT,
+  oauthId TEXT
+);
 
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
@@ -70,6 +73,21 @@ db.exec(`
 // Migration to add remindersEnabled column if db already existed
 try {
   db.exec("ALTER TABLE users ADD COLUMN remindersEnabled INTEGER NOT NULL DEFAULT 1");
+} catch (e) {
+  // Already exists
+}
+
+// Migration to add role column if db already existed
+try {
+  db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin'))");
+} catch (e) {
+  // Already exists
+}
+
+// Migration to add OAuth columns if db already existed
+try {
+  db.exec("ALTER TABLE users ADD COLUMN oauthProvider TEXT");
+  db.exec("ALTER TABLE users ADD COLUMN oauthId TEXT");
 } catch (e) {
   // Already exists
 }

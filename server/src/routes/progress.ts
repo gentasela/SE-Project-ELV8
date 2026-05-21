@@ -64,6 +64,11 @@ router.put("/log/:date", requireAuth, (req, res) => {
   const { date } = req.params;
   const { workoutDone, meals } = req.body;
 
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+if (!dateRegex.test(date)) {
+  return res.status(400).json({ error: "Date must be in YYYY-MM-DD format." });
+}
+
   try {
     // Get existing
     const existing = db.prepare("SELECT * FROM progress WHERE userId = ? AND date = ?").get(req.user!.id, date) as ProgressRow | undefined;

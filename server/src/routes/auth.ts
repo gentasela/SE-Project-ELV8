@@ -23,10 +23,34 @@ router.post("/signup", (req, res) => {
   const { email, password, name, age, heightCm, weightKg, sex, discipline, level, goal } = req.body;
 
   if (!email || !password || !name || !age || !heightCm || !weightKg || !sex || !discipline || !level || !goal) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
+  return res.status(400).json({ error: "Missing required fields" });
+}
+
+if (password.length < 8) {
+  return res.status(400).json({ error: "Password must be at least 8 characters." });
+}
 
   const cleanEmail = email.trim().toLowerCase();
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+if (!emailRegex.test(cleanEmail)) {
+  return res.status(400).json({ error: "Invalid email address." });
+}
+
+if (password.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters." });
+  }
+
+  // ADD THE 3 CHECKS HERE ↓
+  if (Number(age) < 10 || Number(age) > 120) {
+    return res.status(400).json({ error: "Age must be between 10 and 120." });
+  }
+  if (Number(heightCm) < 50 || Number(heightCm) > 300) {
+    return res.status(400).json({ error: "Height must be between 50 and 300 cm." });
+  }
+  if (Number(weightKg) < 20 || Number(weightKg) > 500) {
+    return res.status(400).json({ error: "Weight must be between 20 and 500 kg." });
+  }
 
   try {
     // Check if user already exists
